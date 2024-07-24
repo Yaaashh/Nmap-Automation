@@ -1,44 +1,45 @@
+import argparse
 import subprocess
 import datetime
-import argparse
+import threading
 import os
 
+NMAP_ARGS = "-A"
+
 def run_nmap_scan(target, output_file):
-    command = f"nmap -A -sS -sV -O -p 1-65535 -sU -T4 {target}"
+    command = f"nmap {NMAP_ARGS} {target} -oN {output_file}"
+    try:
+        print(f"Starting Nmap scan for {target} with command: {command}")
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+        print(f"Nmap scan for {target} completed.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error scanning host {target}: {e}")
 
-    print("Starting comprehensive nmap scan...")
-    print(f"Command: {command}")
-
-    with open(output_file, 'w') as f:
-        f.write(f"### Comprehensive Nmap Scan ###\n")
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, shell=True, check=True)
-            f.write(result.stdout + "\n")
-            print("Comprehensive nmap scan completed successfully.\n")
-        except subprocess.CalledProcessError as e:
-            f.write(f"Error running nmap scan: {e}\n")
-            print(f"Error running nmap scan: {e}\n")
+def notify_progress(target):
+    print(f"Scan in progress for {target}. Please wait...")
 
 def main():
-    parser = argparse.ArgumentParser(description="Run a comprehensive nmap scan on a target and save the results to a text file.")
-    parser.add_argument('--target', required=True, help='Target IP(s), range(s), subnet(s), or URL (e.g., 192.168.1.0/24, 10.0.0.1-10, example.com)')
+    parser = argparse.ArgumentParser(description="Automate Nmap scans with fixed arguments.")
+    parser.add_argument('--target', required=True, help='Target IP(s), range(s), subnet(s), or URL')
     args = parser.parse_args()
 
-    # Define the output file name with target and timestamp
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_target = args.target.replace("/", "_").replace(".", "_")
-    output_file = f'{safe_target}_{timestamp}.txt'
+    if not args.target:
+        print("Error: No target specified.")
+        return
 
-    print(f"Starting comprehensive nmap scan on {args.target}. Results will be saved to {output_file}.\n")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    output_file = f"{args.target.replace('/', '_').replace(':', '_')}_{timestamp}.txt"
 
-    # Run nmap command and save results to the output file
-    run_nmap_scan(args.target, output_file)
+    progress_thread = threading.Thread(target=notify_progress, args=(args.target,))
+    scan_thread = threading.Thread(target=run_nmap_scan, args=(args.target, output_file))
 
-    # Notify the user
-    if os.path.exists(output_file):
-        print(f'Nmap comprehensive scan completed for {args.target}. Results saved to {output_file}.')
-    else:
-        print(f'Error: Nmap scan failed for {args.target}. No output file created.')
+    progress_thread.start()
+    scan_thread.start()
+
+    progress_thread.join()
+    scan_thread.join()
+
+    print(f"Nmap scan completed for {args.target}. Results saved to {output_file}.")
 
 if __name__ == "__main__":
     main()
